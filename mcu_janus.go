@@ -465,7 +465,7 @@ func (c *mcuJanusClient) Close(ctx context.Context) {
 func (c *mcuJanusClient) SendMessage(ctx context.Context, message *MessageClientMessage, data *MessageClientMessageData, callback func(error, map[string]interface{})) {
 }
 
-func (c *mcuJanusClient) closeClient(ctx context.Context) {
+func (c *mcuJanusClient) closeClient(ctx context.Context) bool {
 	if handle := c.handle; handle != nil {
 		c.handle = nil
 		c.closeChan <- true
@@ -474,7 +474,10 @@ func (c *mcuJanusClient) closeClient(ctx context.Context) {
 				log.Println("Could not detach client", handle.Id, err)
 			}
 		}
+		return true
 	}
+
+	return false
 }
 
 func (c *mcuJanusClient) run(handle *JanusHandle, closeChan chan bool) {
@@ -696,6 +699,8 @@ func (m *mcuJanus) NewPublisher(ctx context.Context, listener McuListener, id st
 	m.publishers[id+"|"+streamType] = client
 	m.publisherCreated.Notify(id + "|" + streamType)
 	m.mu.Unlock()
+	statsPublishersCurrent.WithLabelValues(streamType).Inc()
+	statsPublishersTotal.WithLabelValues(streamType).Inc()
 	return client, nil
 }
 
@@ -779,12 +784,14 @@ func (p *mcuJanusPublisher) Close(ctx context.Context) {
 	p.mu.Unlock()
 
 	if notify {
+		statsPublishersCurrent.WithLabelValues(p.streamType).Dec()
 		p.mcu.unregisterClient(p)
 		p.listener.PublisherClosed(p)
 	}
 }
 
 func (p *mcuJanusPublisher) SendMessage(ctx context.Context, message *MessageClientMessage, data *MessageClientMessageData, callback func(error, map[string]interface{})) {
+	statsMcuMessagesTotal.WithLabelValues(data.Type).Inc()
 	jsep_msg := data.Payload
 	switch data.Type {
 	case "offer":
@@ -895,6 +902,8 @@ func (m *mcuJanus) NewSubscriber(ctx context.Context, listener McuListener, publ
 	client.mcuJanusClient.handleSlowLink = client.handleSlowLink
 	m.registerClient(client)
 	go client.run(handle, client.closeChan)
+	statsSubscribersCurrent.WithLabelValues(streamType).Inc()
+	statsSubscribersTotal.WithLabelValues(streamType).Inc()
 	return client, nil
 }
 
@@ -962,9 +971,12 @@ func (p *mcuJanusSubscriber) NotifyReconnected() {
 
 func (p *mcuJanusSubscriber) Close(ctx context.Context) {
 	p.mu.Lock()
-	p.closeClient(ctx)
+	closed := p.closeClient(ctx)
 	p.mu.Unlock()
 
+	if closed {
+		statsSubscribersCurrent.WithLabelValues(p.streamType).Dec()
+	}
 	p.mcu.unregisterClient(p)
 	p.listener.SubscriberClosed(p)
 }
@@ -979,6 +991,7 @@ func (p *mcuJanusSubscriber) joinRoom(ctx context.Context, callback func(error, 
 	waiter := p.mcu.publisherConnected.NewWaiter(p.publisher + "|" + p.streamType)
 	defer p.mcu.publisherConnected.Release(waiter)
 
+	loggedNotPublishingYet := false
 retry:
 	join_msg := map[string]interface{}{
 		"request": "join",
@@ -1033,6 +1046,11 @@ retry:
 				log.Printf("Publisher %s not sending yet for %s, wait and retry to join room %d as subscriber", p.publisher, p.streamType, p.roomId)
 			}
 
+			if !loggedNotPublishingYet {
+				loggedNotPublishingYet = true
+				statsWaitingForPublisherTotal.WithLabelValues(p.streamType).Inc()
+			}
+
 			if err := waiter.Wait(ctx); err != nil {
 				callback(err, nil)
 				return
@@ -1052,6 +1070,7 @@ retry:
 }
 
 func (p *mcuJanusSubscriber) SendMessage(ctx context.Context, message *MessageClientMessage, data *MessageClientMessageData, callback func(error, map[string]interface{})) {
+	statsMcuMessagesTotal.WithLabelValues(data.Type).Inc()
 	jsep_msg := data.Payload
 	switch data.Type {
 	case "requestoffer":
