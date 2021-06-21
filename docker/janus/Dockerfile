@@ -1,13 +1,13 @@
 # Modified from https://gitlab.com/powerpaul17/nc_talk_backend/-/blob/dcbb918d8716dad1eb72a889d1e6aa1e3a543641/docker/janus/Dockerfile
-FROM alpine:3.13
+FROM alpine:3.14
 
 RUN apk add --no-cache curl autoconf automake libtool pkgconf build-base \
   glib-dev libconfig-dev libnice-dev jansson-dev openssl-dev zlib libsrtp-dev \
   gengetopt libwebsockets-dev git curl-dev libogg-dev
 
 # usrsctp
-# 29 Mar 2021
-ARG USRSCTP_VERSION=70d42ae95a1de83bd317c8cc9503f894671d1392
+# 19 Jun 2021
+ARG USRSCTP_VERSION=61365d57d39cfd141d12816baece5be38b93f0eb
 
 RUN cd /tmp && \
     git clone https://github.com/sctplab/usrsctp && \
@@ -30,7 +30,7 @@ RUN cd /tmp && \
 
 # JANUS
 
-ARG JANUS_VERSION=0.11.1
+ARG JANUS_VERSION=0.11.3
 RUN mkdir -p /usr/src/janus && \
     cd /usr/src/janus && \
     curl -L https://github.com/meetecho/janus-gateway/archive/v$JANUS_VERSION.tar.gz | tar -xz && \
