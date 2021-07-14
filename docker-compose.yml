@@ -12,7 +12,7 @@ services:
       - janus
       - coturn
   nats:
-    image: nats:2.3.0
+    image: nats:2.3.2
     volumes:
       - ./gnatsd.conf:/config/gnatsd.conf
     command: ["-c", "/config/gnatsd.conf"]
