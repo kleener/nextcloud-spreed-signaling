@@ -18,15 +18,15 @@ RUN cd /tmp && \
     make && make install
 
 # libsrtp
+# 11 Jun 2021
+ARG LIBSRTP_VERSION=bd0f27ec0e299ad101a396dde3f7c90d48efc8fc
 RUN cd /tmp && \
-    wget https://github.com/cisco/libsrtp/archive/v2.3.0.tar.gz && \
-    tar xfv v2.3.0.tar.gz && \
-    cd libsrtp-2.3.0 && \
+    git clone https://github.com/cisco/libsrtp && \
+    cd libsrtp && \
+    git checkout $LIBSRTP_VERSION && \
     ./configure --prefix=/usr --enable-openssl && \
     make shared_library && \
-    make install && \
-    rm -fr /libsrtp-2.3.0 && \
-    rm -f /v2.3.0.tar.gz
+    make install
 
 # JANUS
 
